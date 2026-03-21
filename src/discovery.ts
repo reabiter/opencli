@@ -9,10 +9,14 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import yaml from 'js-yaml';
 import { type CliCommand, type InternalCliCommand, type Arg, Strategy, registerCommand } from './registry.js';
 import { log } from './logger.js';
+
+/** Plugins directory: ~/.opencli/plugins/ */
+export const PLUGINS_DIR = path.join(os.homedir(), '.opencli', 'plugins');
 
 /**
  * Discover and register CLI commands.
@@ -164,4 +168,52 @@ async function registerYamlCli(filePath: string, defaultSite: string): Promise<v
   } catch (err: any) {
     log.warn(`Failed to load ${filePath}: ${err.message}`);
   }
+}
+
+/**
+ * Discover and register plugins from ~/.opencli/plugins/.
+ * Each subdirectory is treated as a plugin (site = directory name).
+ * Files inside are scanned flat (no nested site subdirs).
+ */
+export async function discoverPlugins(): Promise<void> {
+  try { await fs.promises.access(PLUGINS_DIR); } catch { return; }
+  const entries = await fs.promises.readdir(PLUGINS_DIR, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    await discoverPluginDir(path.join(PLUGINS_DIR, entry.name), entry.name);
+  }
+}
+
+/**
+ * Flat scan: read yaml/ts files directly in a plugin directory.
+ * Unlike discoverClisFromFs, this does NOT expect nested site subdirectories.
+ */
+async function discoverPluginDir(dir: string, site: string): Promise<void> {
+  const files = await fs.promises.readdir(dir);
+  const fileSet = new Set(files);
+  const promises: Promise<any>[] = [];
+  for (const file of files) {
+    const filePath = path.join(dir, file);
+    if (file.endsWith('.yaml') || file.endsWith('.yml')) {
+      promises.push(registerYamlCli(filePath, site));
+    } else if (file.endsWith('.js') && !file.endsWith('.d.js')) {
+      promises.push(
+        import(`file://${filePath}`).catch((err: any) => {
+          log.warn(`Plugin ${site}/${file}: ${err.message}`);
+        })
+      );
+    } else if (
+      file.endsWith('.ts') && !file.endsWith('.d.ts') && !file.endsWith('.test.ts')
+    ) {
+      // Skip .ts if a compiled .js sibling exists (production mode can't load .ts)
+      const jsFile = file.replace(/\.ts$/, '.js');
+      if (fileSet.has(jsFile)) continue;
+      promises.push(
+        import(`file://${filePath}`).catch((err: any) => {
+          log.warn(`Plugin ${site}/${file}: ${err.message}`);
+        })
+      );
+    }
+  }
+  await Promise.all(promises);
 }

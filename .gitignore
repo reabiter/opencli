@@ -15,3 +15,7 @@ docs/.vitepress/cache
 *.pem
 *.crx
 *.zip
+.envrc
+.windsurf
+.claude
+.cortex

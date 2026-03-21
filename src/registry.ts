@@ -49,7 +49,13 @@ export interface CliOptions extends Partial<Omit<CliCommand, 'args' | 'descripti
   description?: string;
   args?: Arg[];
 }
-const _registry = new Map<string, CliCommand>();
+
+// Use globalThis to ensure a single shared registry across all module instances.
+// This is critical for TS plugins loaded via npm link / peerDependency — without
+// this, the plugin's import creates a separate module instance with its own Map.
+const REGISTRY_KEY = '__opencli_registry__';
+const _registry: Map<string, CliCommand> =
+  (globalThis as any)[REGISTRY_KEY] ??= new Map<string, CliCommand>();
 
 export function cli(opts: CliOptions): CliCommand {
   const strategy = opts.strategy ?? (opts.browser === false ? Strategy.PUBLIC : Strategy.COOKIE);

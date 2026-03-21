@@ -1,16 +1,54 @@
-/**
- * Tests for discovery and execution modules.
- */
-
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { discoverClis } from './discovery.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { discoverClis, discoverPlugins, PLUGINS_DIR } from './discovery.js';
 import { executeCommand } from './execution.js';
 import { getRegistry, cli, Strategy } from './registry.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 describe('discoverClis', () => {
   it('handles non-existent directories gracefully', async () => {
     // Should not throw for missing directories
     await expect(discoverClis('/tmp/nonexistent-opencli-test-dir')).resolves.not.toThrow();
+  });
+});
+
+describe('discoverPlugins', () => {
+  const testPluginDir = path.join(PLUGINS_DIR, '__test-plugin__');
+  const yamlPath = path.join(testPluginDir, 'greeting.yaml');
+
+  afterEach(async () => {
+    try { await fs.promises.rm(testPluginDir, { recursive: true }); } catch {}
+  });
+
+  it('discovers YAML plugins from ~/.opencli/plugins/', async () => {
+    // Create a simple YAML adapter in the plugins directory
+    await fs.promises.mkdir(testPluginDir, { recursive: true });
+    await fs.promises.writeFile(yamlPath, `
+site: __test-plugin__
+name: greeting
+description: Test plugin greeting
+strategy: public
+browser: false
+
+pipeline:
+  - evaluate: "() => [{ message: 'hello from plugin' }]"
+
+columns: [message]
+`);
+
+    await discoverPlugins();
+
+    const registry = getRegistry();
+    const cmd = registry.get('__test-plugin__/greeting');
+    expect(cmd).toBeDefined();
+    expect(cmd!.site).toBe('__test-plugin__');
+    expect(cmd!.name).toBe('greeting');
+    expect(cmd!.description).toBe('Test plugin greeting');
+  });
+
+  it('handles non-existent plugins directory gracefully', async () => {
+    // discoverPlugins should not throw if ~/.opencli/plugins/ does not exist
+    await expect(discoverPlugins()).resolves.not.toThrow();
   });
 });
 

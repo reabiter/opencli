@@ -13,6 +13,10 @@
   "bin": {
     "opencli": "dist/main.js"
   },
+  "exports": {
+    ".": "./dist/main.js",
+    "./registry": "./dist/registry-api.js"
+  },
   "scripts": {
     "dev": "tsx src/main.ts",
     "build": "tsc && npm run clean-yaml && npm run copy-yaml && npm run build-manifest",

@@ -231,6 +231,75 @@ export function runCli(BUILTIN_CLIS: string, USER_CLIS: string): void {
       printCompletionScript(shell);
     });
 
+  // ── Plugin management ──────────────────────────────────────────────────────
+
+  const pluginCmd = program.command('plugin').description('Manage opencli plugins');
+
+  pluginCmd
+    .command('install')
+    .description('Install a plugin from GitHub')
+    .argument('<source>', 'Plugin source (e.g. github:user/repo)')
+    .action(async (source: string) => {
+      const { installPlugin } = await import('./plugin.js');
+      try {
+        const name = installPlugin(source);
+        console.log(chalk.green(`✅ Plugin "${name}" installed successfully.`));
+        console.log(chalk.dim(`   Restart opencli to use the new commands.`));
+      } catch (err: any) {
+        console.error(chalk.red(`Error: ${err.message}`));
+        process.exitCode = 1;
+      }
+    });
+
+  pluginCmd
+    .command('uninstall')
+    .description('Uninstall a plugin')
+    .argument('<name>', 'Plugin name')
+    .action(async (name: string) => {
+      const { uninstallPlugin } = await import('./plugin.js');
+      try {
+        uninstallPlugin(name);
+        console.log(chalk.green(`✅ Plugin "${name}" uninstalled.`));
+      } catch (err: any) {
+        console.error(chalk.red(`Error: ${err.message}`));
+        process.exitCode = 1;
+      }
+    });
+
+  pluginCmd
+    .command('list')
+    .description('List installed plugins')
+    .option('-f, --format <fmt>', 'Output format: table, json', 'table')
+    .action(async (opts) => {
+      const { listPlugins } = await import('./plugin.js');
+      const plugins = listPlugins();
+      if (plugins.length === 0) {
+        console.log(chalk.dim('  No plugins installed.'));
+        console.log(chalk.dim(`  Install one with: opencli plugin install github:user/repo`));
+        return;
+      }
+      if (opts.format === 'json') {
+        renderOutput(plugins, {
+          fmt: 'json',
+          columns: ['name', 'commands', 'source'],
+          title: 'opencli/plugins',
+          source: 'opencli plugin list',
+        });
+        return;
+      }
+      console.log();
+      console.log(chalk.bold('  Installed plugins'));
+      console.log();
+      for (const p of plugins) {
+        const cmds = p.commands.length > 0 ? chalk.dim(` (${p.commands.join(', ')})`) : '';
+        const src = p.source ? chalk.dim(` ← ${p.source}`) : '';
+        console.log(`  ${chalk.cyan(p.name)}${cmds}${src}`);
+      }
+      console.log();
+      console.log(chalk.dim(`  ${plugins.length} plugin(s) installed`));
+      console.log();
+    });
+
   // ── External CLIs ─────────────────────────────────────────────────────────
 
   const externalClis = loadExternalClis();
