@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
 import { cli, Strategy } from '../../registry.js';
 import type { IPage } from '../../types.js';
+import { ConfigError } from '../../errors.js';
 
 export const statusCommand = cli({
   site: 'chatgpt',
@@ -13,7 +14,7 @@ export const statusCommand = cli({
   columns: ['Status'],
   func: async (page: IPage | null) => {
     if (process.platform !== 'darwin') {
-      throw new Error('ChatGPT Desktop integration requires macOS (osascript is not available on this platform)');
+      throw new ConfigError('ChatGPT Desktop integration requires macOS (osascript is not available on this platform)');
     }
 
     try {
