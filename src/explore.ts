@@ -129,7 +129,7 @@ export interface ExploreBundle {
 }
 
 /**
- * Parse raw network output from Playwright MCP.
+ * Parse raw network output from the browser bridge.
  * Handles text format: [GET] url => [200]
  */
 function parseNetworkRequests(raw: unknown): NetworkEntry[] {

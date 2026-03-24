@@ -23,7 +23,7 @@ export const modelCommand = cli({
           let m = document.querySelector('[title*="Model"], [aria-label*="Model"], .model-selector, [class*="ModelPicker"]');
           
           if (!m && document.querySelector('webview, iframe')) {
-              // Not directly in main DOM, might be in a webview, but Playwright evaluate doesn't cross origin boundaries easily without frames[].
+              // Not directly in main DOM, might be in a webview — evaluate doesn't cross origin boundaries without frames[].
               return 'Unknown (Likely inside a WebView, please focus the Chat tab)';
           }
           return m ? (m.textContent || m.getAttribute('title') || m.getAttribute('aria-label')).trim() : 'Unknown or Not Found';
