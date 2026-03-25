@@ -183,9 +183,11 @@ function connect() {
     ws?.close();
   };
 }
+const MAX_EAGER_ATTEMPTS = 6;
 function scheduleReconnect() {
   if (reconnectTimer) return;
   reconnectAttempts++;
+  if (reconnectAttempts > MAX_EAGER_ATTEMPTS) return;
   const delay = Math.min(WS_RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts - 1), WS_RECONNECT_MAX_DELAY);
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;

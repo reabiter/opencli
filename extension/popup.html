@@ -38,6 +38,22 @@
     .dot.connecting { background: #ff9500; }
     .status-text { font-size: 13px; color: #555; }
     .status-text strong { color: #333; }
+    .hint {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: #f0f4ff;
+      font-size: 11px;
+      color: #666;
+      line-height: 1.5;
+      display: none;
+    }
+    .hint code {
+      background: #e8ecf1;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 11px;
+    }
     .footer {
       margin-top: 14px;
       text-align: center;
@@ -56,6 +72,9 @@
   <div class="status-row">
     <span class="dot disconnected" id="dot"></span>
     <span class="status-text" id="status">Checking...</span>
+  </div>
+  <div class="hint" id="hint">
+    This is normal. The extension connects automatically when you run any <code>opencli</code> command.
   </div>
   <div class="footer">
     <a href="https://github.com/jackwener/opencli" target="_blank">Documentation</a>
