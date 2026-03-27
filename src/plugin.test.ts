@@ -712,6 +712,14 @@ describe('installLocalPlugin', () => {
     expect(lock[pluginName].source).toMatch(/^local:/);
   });
 
+  it('lists the recorded local source', () => {
+    _installLocalPlugin(tmpDir, pluginName);
+    const plugins = listPlugins();
+    const found = plugins.find(p => p.name === pluginName);
+    expect(found).toBeDefined();
+    expect(found!.source).toBe(`local:${path.resolve(tmpDir)}`);
+  });
+
   it('throws for non-existent path', () => {
     expect(() => _installLocalPlugin('/does/not/exist', 'x')).toThrow('does not exist');
   });
