@@ -11,7 +11,7 @@ import { buildDomContext } from './dom-context.js';
 import { buildSystemPrompt, buildStepMessage, buildLoopWarning, buildBudgetWarning } from './prompts.js';
 import { LLMClient, type ChatMessage } from './llm-client.js';
 import { ActionExecutor } from './action-executor.js';
-import { TraceRecorder, type ActionTrace } from './trace-recorder.js';
+import { TraceRecorder, type RichTrace } from './trace-recorder.js';
 
 export class AgentLoop {
   private steps: AgentStep[] = [];
@@ -49,6 +49,11 @@ export class AgentLoop {
       await this.page.wait(2);
     }
 
+    // Install network interceptor for rich trace capture
+    if (this.traceRecorder) {
+      await this.traceRecorder.installInterceptor(this.page);
+    }
+
     for (let step = 1; step <= this.config.maxSteps; step++) {
       try {
         const result = await this.step(step);
@@ -68,7 +73,7 @@ export class AgentLoop {
             result: `Agent stopped after ${this.consecutiveErrors} consecutive errors. Last: ${errMsg}`,
             stepsCompleted: step,
             tokenUsage: this.llm.getTokenUsage(),
-            trace: this.traceRecorder?.finalize(this.config.task, this.config.startUrl),
+            trace: await this.traceRecorder?.finalize(this.page, this.config.task, this.config.startUrl),
           };
         }
 
@@ -86,7 +91,7 @@ export class AgentLoop {
       result: `Agent reached maximum steps (${this.config.maxSteps}) without completing the task`,
       stepsCompleted: this.config.maxSteps,
       tokenUsage: this.llm.getTokenUsage(),
-      trace: this.traceRecorder?.finalize(this.config.task, this.config.startUrl),
+      trace: await this.traceRecorder?.finalize(this.page, this.config.task, this.config.startUrl),
     };
   }
 
@@ -164,7 +169,8 @@ export class AgentLoop {
           extractedData: action.extractedData,
           stepsCompleted: stepNumber,
           tokenUsage: this.llm.getTokenUsage(),
-          trace: this.traceRecorder?.finalize(
+          trace: await this.traceRecorder?.finalize(
+            this.page,
             this.config.task,
             this.config.startUrl,
             action.result,

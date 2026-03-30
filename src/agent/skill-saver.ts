@@ -1,28 +1,27 @@
 /**
- * Skill Saver — converts an action trace into a reusable YAML CLI command.
+ * Skill Saver — generates a production-quality TypeScript adapter from
+ * an agent's rich execution trace.
  *
- * The generated YAML uses OpenCLI's existing pipeline system (executePipeline),
- * so saved skills run deterministically without any LLM involvement.
+ * Flow: RichTrace → API Discovery → LLM Code Generation → Write .ts → Validate
  */
 
-import { writeFileSync, mkdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { homedir } from 'node:os';
-import type { ActionTrace, TraceStep } from './trace-recorder.js';
+import { LLMClient } from './llm-client.js';
+import { discoverApi, type DiscoveryResult } from './api-discovery.js';
+import type { RichTrace } from './trace-recorder.js';
 
-interface SavedSkill {
+export interface SavedSkill {
   path: string;
   command: string;
 }
 
 /**
- * Convert an action trace into a YAML CLI skill file.
- *
- * @param trace - The recorded action trace
- * @param name - Skill name in "site/command" format (e.g., "flights/search")
+ * Generate a TS adapter from a rich trace via LLM code generation.
  */
 export async function saveTraceAsSkill(
-  trace: ActionTrace,
+  trace: RichTrace,
   name: string,
 ): Promise<SavedSkill> {
   // Parse and validate name
@@ -32,29 +31,19 @@ export async function saveTraceAsSkill(
   }
   const [site, command] = parts;
 
-  // Convert trace steps to pipeline YAML
-  const pipeline = convertTraceToPipeline(trace);
+  // Stage 2: API Discovery
+  const discovery = discoverApi(trace);
 
-  // Detect arguments (text that looks like user input)
-  const args = detectArguments(trace);
+  // Stage 3: LLM Code Generation
+  const tsCode = await generateTsAdapter(trace, discovery, site, command);
 
-  // Build YAML content
-  const yaml = buildYaml({
-    site,
-    command,
-    description: trace.task,
-    domain: extractDomain(trace.startUrl),
-    args,
-    pipeline,
-  });
-
-  // Write to ~/.opencli/clis/<site>/<command>.yaml
+  // Write .ts file
   const cliDir = join(homedir(), '.opencli', 'clis', site);
   mkdirSync(cliDir, { recursive: true });
-  const filePath = join(cliDir, `${command}.yaml`);
-  writeFileSync(filePath, yaml, 'utf-8');
+  const filePath = join(cliDir, `${command}.ts`);
+  writeFileSync(filePath, tsCode, 'utf-8');
 
-  // Also save raw trace as JSON for debugging
+  // Save raw trace as JSON for debugging
   const traceDir = join(homedir(), '.opencli', 'traces');
   mkdirSync(traceDir, { recursive: true });
   const tracePath = join(traceDir, `${site}-${command}-${Date.now()}.json`);
@@ -66,153 +55,253 @@ export async function saveTraceAsSkill(
   };
 }
 
-interface PipelineStep {
-  action: string;
-  [key: string]: unknown;
-}
+/**
+ * Stage 4: Validate the generated adapter and self-repair if needed.
+ */
+export async function saveTraceAsSkillWithValidation(
+  trace: RichTrace,
+  name: string,
+  maxRetries: number = 2,
+): Promise<SavedSkill> {
+  const saved = await saveTraceAsSkill(trace, name);
 
-function convertTraceToPipeline(trace: ActionTrace): PipelineStep[] {
-  const steps: PipelineStep[] = [];
+  // Try to import the generated file to check for syntax errors
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      // Dynamic import to verify syntax
+      const { pathToFileURL } = await import('node:url');
+      await import(pathToFileURL(saved.path).href);
+      return saved; // Success — file is valid
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
 
-  // Add initial navigation if there's a start URL
-  if (trace.startUrl) {
-    steps.push({ action: 'navigate', url: trace.startUrl });
-    steps.push({ action: 'wait', time: 2 });
-  }
-
-  for (const step of trace.steps) {
-    const pipelineStep = convertStep(step);
-    if (pipelineStep) {
-      steps.push(pipelineStep);
-    }
-  }
-
-  return steps;
-}
-
-function convertStep(step: TraceStep): PipelineStep | null {
-  const action = step.action;
-
-  switch (action.type) {
-    case 'click': {
-      if (!step.selector) return null;
-      const sel = JSON.stringify(step.selector);
-      return {
-        action: 'evaluate',
-        code: `document.querySelector(${sel})?.click()`,
-      };
-    }
-
-    case 'type': {
-      if (!step.selector) return null;
-      const typeSel = JSON.stringify(step.selector);
-      const text = action.text;
-      return {
-        action: 'evaluate',
-        code: `(function() { var el = document.querySelector(${typeSel}); if (el) { el.focus(); el.value = ''; el.value = ${JSON.stringify(text)}; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); } })()`,
-      };
-    }
-
-    case 'navigate':
-      return { action: 'navigate', url: action.url };
-
-    case 'scroll':
-      return {
-        action: 'evaluate',
-        code: `window.scrollBy(0, ${action.direction === 'up' ? -500 : 500})`,
-      };
-
-    case 'wait':
-      return { action: 'wait', time: action.seconds ?? 2 };
-
-    case 'press_key':
-      return {
-        action: 'evaluate',
-        code: `document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {key: ${JSON.stringify(action.key)}, bubbles: true}))`,
-      };
-
-    case 'go_back':
-      return { action: 'evaluate', code: 'history.back()' };
-
-    case 'extract':
-      return {
-        action: 'evaluate',
-        code: 'document.body.innerText.slice(0, 5000)',
-        variable: 'extracted',
-      };
-
-    default:
-      return null;
-  }
-}
-
-function detectArguments(trace: ActionTrace): Array<{ name: string; type: string; positional: boolean; help: string }> {
-  // Look for type actions that might contain user-varying input
-  const typeSteps = trace.steps.filter(s => s.action.type === 'type');
-
-  // If there are type actions, the first one is likely a search/query argument
-  if (typeSteps.length > 0) {
-    return [{
-      name: 'query',
-      type: 'string',
-      positional: true,
-      help: 'Search query or input text',
-    }];
-  }
-
-  return [];
-}
-
-interface YamlConfig {
-  site: string;
-  command: string;
-  description: string;
-  domain?: string;
-  args: Array<{ name: string; type: string; positional: boolean; help: string }>;
-  pipeline: PipelineStep[];
-}
-
-function buildYaml(config: YamlConfig): string {
-  const lines: string[] = [];
-
-  lines.push(`# Auto-generated by opencli operate --save-as`);
-  lines.push(`# Task: ${config.description}`);
-  lines.push(`# Generated: ${new Date().toISOString()}`);
-  lines.push('');
-  lines.push(`site: ${config.site}`);
-  lines.push(`name: ${config.command}`);
-  lines.push(`description: "${escapeYaml(config.description)}"`);
-  if (config.domain) {
-    lines.push(`domain: ${config.domain}`);
-  }
-  lines.push(`strategy: ui`);
-  lines.push(`browser: true`);
-
-  if (config.args.length > 0) {
-    lines.push('args:');
-    for (const arg of config.args) {
-      lines.push(`  - name: ${arg.name}`);
-      lines.push(`    type: ${arg.type}`);
-      if (arg.positional) lines.push(`    positional: true`);
-      if (arg.help) lines.push(`    help: "${escapeYaml(arg.help)}"`);
-    }
-  }
-
-  lines.push('pipeline:');
-  for (const step of config.pipeline) {
-    lines.push(`  - action: ${step.action}`);
-    for (const [key, value] of Object.entries(step)) {
-      if (key === 'action') continue;
-      if (typeof value === 'string') {
-        lines.push(`    ${key}: "${escapeYaml(value)}"`);
-      } else if (typeof value === 'number') {
-        lines.push(`    ${key}: ${value}`);
+      if (attempt >= maxRetries - 1) {
+        // Last attempt failed — return what we have
+        console.error(`Warning: Generated adapter has issues: ${errMsg}`);
+        return saved;
       }
+
+      // Self-repair: feed error back to LLM
+      const [site, command] = name.split('/');
+      const currentCode = readFileSync(saved.path, 'utf-8');
+      const fixedCode = await repairAdapter(currentCode, errMsg, trace);
+      writeFileSync(saved.path, fixedCode, 'utf-8');
     }
   }
 
-  lines.push('');
-  return lines.join('\n');
+  return saved;
+}
+
+// ── LLM Code Generation ──────────────────────────────────────────────
+
+async function generateTsAdapter(
+  trace: RichTrace,
+  discovery: DiscoveryResult,
+  site: string,
+  command: string,
+): Promise<string> {
+  const llm = new LLMClient();
+
+  const prompt = buildGenerationPrompt(trace, discovery, site, command);
+
+  const response = await llm.chat(
+    'You are an expert TypeScript developer specializing in OpenCLI adapter generation. You output ONLY valid TypeScript code, no explanations or markdown.',
+    [{ role: 'user', content: prompt }],
+  );
+
+  // Extract code from the response
+  return extractCode(response.actions?.[0]?.type === 'done'
+    ? (response.actions[0] as any).result ?? ''
+    : JSON.stringify(response));
+}
+
+function buildGenerationPrompt(
+  trace: RichTrace,
+  discovery: DiscoveryResult,
+  site: string,
+  command: string,
+): string {
+  const parts: string[] = [];
+
+  parts.push(`Generate a complete OpenCLI TypeScript adapter file for the following task.
+
+## Task
+${trace.task}
+Starting URL: ${trace.startUrl ?? 'none'}
+
+## OpenCLI Adapter Format
+
+An adapter is a single .ts file that calls cli() to register a command:
+
+\`\`\`typescript
+import { cli, Strategy } from '../../registry.js';
+
+cli({
+  site: '${site}',
+  name: '${command}',
+  description: '...',
+  domain: '...',
+  strategy: Strategy.COOKIE,  // or PUBLIC, INTERCEPT, UI
+  browser: true,              // false if no browser needed
+  args: [
+    { name: 'limit', type: 'int', default: 20, help: 'Number of results' },
+    { name: 'query', type: 'string', positional: true, help: 'Search query' },
+  ],
+  columns: ['title', 'author', 'score'],  // fields to show in table output
+  func: async (page, kwargs) => {
+    // Navigate, fetch API, parse, return array of objects
+    await page.goto('https://...');
+    await page.wait(2);
+    const result = await page.evaluate(\\\`...JS code...\\\`);
+    return result;
+  },
+});
+\`\`\`
+
+## Strategy Guide
+
+- Strategy.PUBLIC: No auth needed. Set browser: false, use direct fetch().
+- Strategy.COOKIE: Needs browser cookies. Navigate to domain first, then fetch with credentials: 'include'.
+- Strategy.INTERCEPT: Need SPA navigation to trigger API. Use page.installInterceptor() then navigate.
+- Strategy.UI: Direct DOM interaction. Use page.evaluate() for extraction, page.click/typeText for interaction.
+
+## Important Patterns
+
+1. For COOKIE strategy: Always \`await page.goto('https://domain')\` first to establish cookie context
+2. For API calls inside evaluate(): Use \`credentials: 'include'\` in fetch
+3. CSRF tokens: Extract from \`document.cookie\` if needed
+4. Return an ARRAY of objects matching the columns
+5. Use optional chaining (?.) for defensive field access
+6. Import errors: \`import { AuthRequiredError, CommandExecutionError } from '../../errors.js';\`
+7. Throw AuthRequiredError if cookies/tokens are missing
+8. Throw CommandExecutionError for API/parsing failures
+9. Never throw on empty results — return []`);
+
+  // API Discovery results
+  parts.push(`\n## API Discovery`);
+  parts.push(`Recommended Strategy: ${discovery.strategy.toUpperCase()}`);
+  parts.push(`Needs Auth: ${discovery.needsAuth}`);
+  parts.push(`Needs CSRF: ${discovery.needsCsrf}`);
+
+  if (discovery.goldenApi) {
+    const api = discovery.goldenApi;
+    parts.push(`\nGolden API Found (score: ${api.score}/100):`);
+    parts.push(`  URL: ${api.url}`);
+    parts.push(`  Method: ${api.method}`);
+    parts.push(`  Array Path: ${api.arrayPath ?? 'none'}`);
+    parts.push(`  Array Length: ${api.arrayLength}`);
+    parts.push(`  Field Overlap with target data: ${api.fieldOverlap}`);
+    parts.push(`\nAPI Response Sample (truncated):`);
+    parts.push(api.responseSample.slice(0, 2000));
+  } else {
+    parts.push('No suitable API found — use UI strategy with page.evaluate()');
+  }
+
+  // Auth context
+  if (discovery.needsAuth) {
+    parts.push(`\n## Auth Context`);
+    parts.push(`Cookie names on domain: ${trace.authContext.cookieNames.join(', ')}`);
+    if (trace.authContext.csrfToken) {
+      parts.push(`CSRF token found: yes (extract from cookies)`);
+    }
+  }
+
+  // Agent action trace
+  parts.push(`\n## Agent Action Trace`);
+  for (const step of trace.steps.slice(0, 10)) { // Limit to 10 steps
+    const actionDesc = step.action.type === 'type'
+      ? `type[${step.selector ?? '?'}] = "${(step.action as any).text}"`
+      : step.action.type === 'click'
+        ? `click[${step.selector ?? '?'}] "${step.elementText ?? ''}"`
+        : step.action.type;
+    parts.push(`  Step ${step.stepNumber}: ${actionDesc} @ ${step.url}`);
+  }
+
+  // Agent thinking (summarized)
+  if (trace.thinkingLog.length > 0) {
+    parts.push(`\n## Agent Reasoning`);
+    for (const t of trace.thinkingLog.slice(0, 5)) {
+      parts.push(`  Step ${t.step}: ${t.thinking.slice(0, 200)}`);
+    }
+  }
+
+  // Target output data
+  if (trace.finalData) {
+    parts.push(`\n## Expected Output Data`);
+    const sample = JSON.stringify(trace.finalData, null, 2);
+    parts.push(sample.slice(0, 2000));
+  }
+
+  parts.push(`\n## Requirements
+- Output ONLY the TypeScript code, nothing else
+- The file must be a complete, runnable adapter
+- Infer reasonable args (limit, query, etc.) from the trace
+- Infer columns from the output data fields
+- Use ${discovery.strategy.toUpperCase()} strategy
+- Domain: ${extractDomain(trace.startUrl) ?? site}
+- Handle errors gracefully (AuthRequiredError, CommandExecutionError)
+- Return [] if no results instead of throwing`);
+
+  // Respond with a done action containing the code as result
+  parts.push(`\nRespond with JSON: {"thinking": "...", "nextGoal": "generate adapter", "actions": [{"type": "done", "result": "<full TypeScript code here>"}]}`);
+
+  return parts.join('\n');
+}
+
+// ── Self-Repair ─────────────────────────────────────────────────────
+
+async function repairAdapter(
+  code: string,
+  error: string,
+  trace: RichTrace,
+): Promise<string> {
+  const llm = new LLMClient();
+
+  const prompt = `Fix this OpenCLI TypeScript adapter that has an error.
+
+## Error
+${error}
+
+## Current Code
+\`\`\`typescript
+${code}
+\`\`\`
+
+## Original Task
+${trace.task}
+
+Fix the error and output ONLY the corrected TypeScript code. No explanations.
+Respond with JSON: {"thinking": "...", "nextGoal": "fix error", "actions": [{"type": "done", "result": "<fixed TypeScript code>"}]}`;
+
+  const response = await llm.chat(
+    'You are a TypeScript expert. Fix the code and output only valid TypeScript.',
+    [{ role: 'user', content: prompt }],
+  );
+
+  return extractCode(response.actions?.[0]?.type === 'done'
+    ? (response.actions[0] as any).result ?? code
+    : code);
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function extractCode(text: string): string {
+  // Try to extract TypeScript from markdown code block
+  const tsMatch = text.match(/```(?:typescript|ts)?\s*\n([\s\S]*?)\n```/);
+  if (tsMatch) return tsMatch[1].trim();
+
+  // If the text starts with import or //, it's probably raw code
+  const trimmed = text.trim();
+  if (trimmed.startsWith('import ') || trimmed.startsWith('/**') || trimmed.startsWith('//')) {
+    return trimmed;
+  }
+
+  // Try to find code between common markers
+  const codeMatch = text.match(/(import\s+[\s\S]*?cli\(\{[\s\S]*?\}\);?)/);
+  if (codeMatch) return codeMatch[1].trim();
+
+  // Return as-is
+  return trimmed;
 }
 
 function extractDomain(url?: string): string | undefined {
@@ -222,8 +311,4 @@ function extractDomain(url?: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function escapeYaml(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }

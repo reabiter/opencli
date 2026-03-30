@@ -112,7 +112,7 @@ export interface AgentResult {
   extractedData?: unknown;
   stepsCompleted: number;
   tokenUsage: { input: number; output: number; estimatedCost: number };
-  trace?: import('./trace-recorder.js').ActionTrace;
+  trace?: import('./trace-recorder.js').RichTrace;
 }
 
 // ── Agent Step ──────────────────────────────────────────────────────────────

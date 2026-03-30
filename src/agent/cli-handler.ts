@@ -9,7 +9,7 @@ import chalk from 'chalk';
 import { browserSession } from '../runtime.js';
 import { ConfigError } from '../errors.js';
 import { AgentLoop } from './agent-loop.js';
-import { saveTraceAsSkill } from './skill-saver.js';
+import { saveTraceAsSkillWithValidation } from './skill-saver.js';
 import type { AgentConfig, AgentResult } from './types.js';
 
 export interface RunAgentOptions extends AgentConfig {
@@ -33,21 +33,24 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
       workspace,
     });
 
-    return agent.run();
-  }, { workspace });
+    const agentResult = await agent.run();
 
-  // Save as skill if requested and successful
-  if (opts.saveAs && result.success && result.trace) {
-    try {
-      const saved = await saveTraceAsSkill(result.trace, opts.saveAs);
-      if (opts.verbose) {
-        console.log(chalk.green(`  Skill saved: ${saved.path}`));
-        console.log(chalk.dim(`  Run with: opencli ${saved.command}`));
+    // Save as skill if requested and successful (must happen inside browserSession
+    // so the page is still available for validation)
+    if (opts.saveAs && agentResult.success && agentResult.trace) {
+      try {
+        const saved = await saveTraceAsSkillWithValidation(agentResult.trace, opts.saveAs);
+        if (opts.verbose) {
+          console.log(chalk.green(`  Skill saved: ${saved.path}`));
+          console.log(chalk.dim(`  Run with: opencli ${saved.command}`));
+        }
+      } catch (err) {
+        console.error(chalk.yellow(`  Warning: Failed to save skill: ${err instanceof Error ? err.message : String(err)}`));
       }
-    } catch (err) {
-      console.error(chalk.yellow(`  Warning: Failed to save skill: ${err instanceof Error ? err.message : String(err)}`));
     }
-  }
+
+    return agentResult;
+  }, { workspace });
 
   return result;
 }
