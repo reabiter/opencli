@@ -162,10 +162,11 @@ export class ActionExecutor {
       // Scroll within a specific element
       const el = elementMap.get(action.index);
       if (el) {
+        const scrollAmount = action.direction === 'up' ? -amount : amount;
         await this.page.evaluate(`
           (function() {
-            var els = document.querySelectorAll('[data-opencli-ref="${action.index}"]');
-            if (els[0]) els[0].scrollBy(0, ${action.direction === 'up' ? -amount : amount});
+            var els = document.querySelectorAll('[data-opencli-ref=' + ${JSON.stringify(String(action.index))} + ']');
+            if (els[0]) els[0].scrollBy(0, ${JSON.stringify(scrollAmount)});
           })()
         `);
       }
@@ -245,15 +246,17 @@ export class ActionExecutor {
       return { action, success: false, error: `Element [${action.index}] not found` };
     }
 
+    const indexStr = JSON.stringify(String(action.index));
     const optionText = JSON.stringify(action.option);
     const result = await this.page.evaluate(`
       (function() {
-        var selects = document.querySelectorAll('[data-opencli-ref="${action.index}"]');
+        var selects = document.querySelectorAll('[data-opencli-ref=' + ${indexStr} + ']');
         var sel = selects[0];
         if (!sel || sel.tagName !== 'SELECT') return { error: 'Not a <select> element' };
+        var target = ${optionText};
         var opts = Array.from(sel.options);
-        var match = opts.find(function(o) { return o.text.trim() === ${optionText} || o.value === ${optionText}; });
-        if (!match) return { error: 'Option not found: ' + ${optionText}, available: opts.map(function(o) { return o.text.trim(); }) };
+        var match = opts.find(function(o) { return o.text.trim() === target || o.value === target; });
+        if (!match) return { error: 'Option not found: ' + target, available: opts.map(function(o) { return o.text.trim(); }) };
         sel.value = match.value;
         sel.dispatchEvent(new Event('change', { bubbles: true }));
         return { selected: match.text };

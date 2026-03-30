@@ -140,8 +140,8 @@ export class AgentLoop {
     );
     let stepText = stepContent.text;
 
-    // Inject warnings
-    const loopInfo = this.detectLoop(domContext);
+    // Inject warnings (loop detection uses previously recorded state, not current step)
+    const loopInfo = this.detectLoop();
     if (loopInfo.actionRepeat >= AgentLoop.LOOP_CRITICAL_THRESHOLD) {
       stepText += '\n\n' + buildLoopWarning(loopInfo.actionRepeat, 'critical');
     } else if (loopInfo.actionRepeat >= AgentLoop.LOOP_STRONG_THRESHOLD) {
@@ -188,9 +188,6 @@ export class AgentLoop {
       if (response.plan) console.log(`  Plan: ${response.plan.join(' → ')}`);
     }
 
-    // Update plan from LLM response
-    this.updatePlan(response);
-
     // Phase 3: Execute actions
     const results: ActionResult[] = [];
     let isDone = false;
@@ -227,13 +224,16 @@ export class AgentLoop {
       }
     }
 
-    // Track consecutive errors at step level
+    // Track consecutive errors at step level (must happen before updatePlan)
     const anyActionFailed = results.some(r => !r.success);
     if (anyActionFailed) {
       this.consecutiveErrors++;
     } else {
       this.consecutiveErrors = 0;
     }
+
+    // Update plan from LLM response (after consecutiveErrors is current)
+    this.updatePlan(response);
 
     // Record step for trace
     if (this.traceRecorder) {
@@ -303,8 +303,8 @@ export class AgentLoop {
     }
   }
 
-  private detectLoop(domContext: DomContext): { actionRepeat: number; pageStall: number } {
-    // Count how many recent action hashes match the latest
+  private detectLoop(): { actionRepeat: number; pageStall: number } {
+    // Count how many recent action hashes match the latest (all from recorded history)
     let actionRepeat = 0;
     if (this.actionHashes.length >= 2) {
       const latest = this.actionHashes[this.actionHashes.length - 1];
@@ -316,10 +316,12 @@ export class AgentLoop {
 
     // Count how many recent page fingerprints are identical
     let pageStall = 0;
-    const currentFp = this.fingerprintPage(domContext);
-    for (let i = this.pageFingerprints.length - 1; i >= 0; i--) {
-      if (this.pageFingerprints[i] === currentFp) pageStall++;
-      else break;
+    if (this.pageFingerprints.length >= 2) {
+      const latest = this.pageFingerprints[this.pageFingerprints.length - 1];
+      for (let i = this.pageFingerprints.length - 2; i >= 0; i--) {
+        if (this.pageFingerprints[i] === latest) pageStall++;
+        else break;
+      }
     }
 
     return { actionRepeat, pageStall };
@@ -329,15 +331,18 @@ export class AgentLoop {
 
   private async callLLMWithTimeout(): Promise<AgentResponse> {
     const timeoutMs = this.config.llmTimeout;
-    return new Promise<AgentResponse>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error(`LLM call timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-
-      this.llm.chat(this.systemPrompt, this.messages)
-        .then(result => { clearTimeout(timer); resolve(result); })
-        .catch(err => { clearTimeout(timer); reject(err); });
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await this.llm.chat(this.systemPrompt, this.messages, controller.signal);
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`LLM call timed out after ${timeoutMs}ms`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   // ── Sensitive Data Masking ──────────────────────────────────────────────
@@ -371,11 +376,25 @@ export class AgentLoop {
       tail = tail.slice(1);
     }
 
-    this.messages = [
-      ...this.messages.slice(0, keepFirst),
-      { role: 'user' as const, content: summary },
-      ...tail,
-    ];
+    const compacted: ChatMessage[] = [...this.messages.slice(0, keepFirst)];
+
+    // The summary is a 'user' message. If the last kept message is also 'user',
+    // merge them to prevent consecutive user messages (Anthropic API requires alternation).
+    if (compacted.length > 0 && compacted[compacted.length - 1].role === 'user') {
+      compacted[compacted.length - 1] = {
+        ...compacted[compacted.length - 1],
+        content: compacted[compacted.length - 1].content + '\n\n' + summary,
+      };
+    } else {
+      compacted.push({ role: 'user' as const, content: summary });
+    }
+
+    // Ensure tail also maintains alternation after summary
+    if (tail.length > 0 && compacted[compacted.length - 1].role === tail[0].role) {
+      tail = tail.slice(1);
+    }
+
+    this.messages = [...compacted, ...tail];
   }
 
   private buildCompactionSummary(messages: ChatMessage[], count: number): string {

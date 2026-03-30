@@ -130,71 +130,44 @@ export async function buildDomContext(page: IPage): Promise<DomContext> {
 }
 
 /**
- * Fetch AX tree via CDP and merge role/name info into the element map.
- * Uses backendNodeId to match AX nodes to DOM elements.
+ * Enrich elements with accessibility info by reading ARIA attributes from DOM.
+ *
+ * Uses a single batched evaluate() call instead of per-element queries for
+ * performance. Reads role, aria-label, and title attributes directly.
  */
 async function enrichWithAccessibilityTree(
   page: IPage,
   elementMap: Map<number, ElementInfo>,
 ): Promise<void> {
-  if (!page.cdp) return;
+  // Collect indices to enrich (cap at 100 elements)
+  const indices = [...elementMap.keys()].slice(0, 100);
+  if (indices.length === 0) return;
 
-  // Get DOM document to map between nodeId and backendNodeId
-  const doc = await page.cdp('DOM.getDocument', { depth: 0 }) as {
-    root?: { nodeId: number };
-  } | null;
-  if (!doc?.root) return;
-
-  // Get the AX tree
-  const axTree = await page.cdp('Accessibility.getFullAXTree') as {
-    nodes?: Array<{
-      nodeId?: string;
-      backendDOMNodeId?: number;
-      role?: { value: string };
-      name?: { value: string };
-      ignored?: boolean;
-    }>;
-  } | null;
-  if (!axTree?.nodes) return;
-
-  // Build a backendNodeId → AX info lookup
-  const axLookup = new Map<number, { role: string; name: string }>();
-  for (const node of axTree.nodes) {
-    if (node.ignored || !node.backendDOMNodeId) continue;
-    axLookup.set(node.backendDOMNodeId, {
-      role: node.role?.value ?? '',
-      name: node.name?.value ?? '',
-    });
-  }
-
-  // For each element in our map, try to resolve its AX info via JS
-  // We query backendNodeId for each element using CDP DOM.resolveNode
-  // This is expensive for many elements, so we only do it for the first 50
-  let enriched = 0;
-  for (const [index, el] of elementMap) {
-    if (enriched >= 50) break;
-
-    try {
-      // Use evaluate to get the element's data-opencli-ref and find its AX node
-      const axInfo = await page.evaluate(`
-        (function() {
-          var el = document.querySelector('[data-opencli-ref="${index}"]');
-          if (!el) return null;
-          // Read ARIA attributes directly from DOM as a fallback
-          return {
-            role: el.getAttribute('role') || el.tagName.toLowerCase(),
-            name: el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent?.trim().slice(0, 50) || '',
-          };
-        })()
-      `) as { role: string; name: string } | null;
-
-      if (axInfo) {
-        el.axRole = axInfo.role;
-        el.axName = axInfo.name;
-        enriched++;
+  // Single batched JS call to read ARIA attributes for all elements
+  const indicesJson = JSON.stringify(indices);
+  const results = await page.evaluate(`
+    (function() {
+      var indices = ${indicesJson};
+      var out = {};
+      for (var i = 0; i < indices.length; i++) {
+        var el = document.querySelector('[data-opencli-ref="' + indices[i] + '"]');
+        if (!el) continue;
+        out[indices[i]] = {
+          role: el.getAttribute('role') || el.tagName.toLowerCase(),
+          name: el.getAttribute('aria-label') || el.getAttribute('title') || ''
+        };
       }
-    } catch {
-      // Skip this element
+      return out;
+    })()
+  `) as Record<string, { role: string; name: string }> | null;
+
+  if (!results) return;
+
+  for (const [idxStr, info] of Object.entries(results)) {
+    const el = elementMap.get(Number(idxStr));
+    if (el) {
+      el.axRole = info.role;
+      el.axName = info.name;
     }
   }
 }

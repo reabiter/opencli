@@ -61,6 +61,7 @@ export class LLMClient {
   async chat(
     systemPrompt: string,
     messages: ChatMessage[],
+    signal?: AbortSignal,
   ): Promise<AgentResponse> {
     const apiMessages: MessageParam[] = messages.map((m, i) => {
       const isLastUser = m.role === 'user' && i === messages.length - 1;
@@ -92,6 +93,7 @@ export class LLMClient {
       };
     });
 
+    const requestOptions = signal ? { signal } : undefined;
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: 4096,
@@ -103,7 +105,7 @@ export class LLMClient {
         },
       ],
       messages: apiMessages,
-    });
+    }, requestOptions);
 
     // Track tokens (including cache stats)
     const usage = response.usage as unknown as Record<string, number> | undefined;
