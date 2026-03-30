@@ -259,6 +259,8 @@ async function handleCommand(cmd: Command): Promise<Result> {
         return await handleScreenshot(cmd, workspace);
       case 'close-window':
         return await handleCloseWindow(cmd, workspace);
+      case 'cdp':
+        return await handleCdp(cmd, workspace);
       case 'sessions':
         return await handleSessions(cmd);
       case 'set-file-input':
@@ -679,6 +681,50 @@ async function handleScreenshot(cmd: Command, workspace: string): Promise<Result
       quality: cmd.quality,
       fullPage: cmd.fullPage,
     });
+    return { id: cmd.id, ok: true, data };
+  } catch (err) {
+    return { id: cmd.id, ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** CDP methods permitted via the 'cdp' passthrough action. */
+const CDP_ALLOWLIST = new Set([
+  // Agent DOM context
+  'Accessibility.getFullAXTree',
+  'DOM.getDocument',
+  'DOM.getBoxModel',
+  'DOM.getContentQuads',
+  'DOM.querySelectorAll',
+  'DOM.scrollIntoViewIfNeeded',
+  'DOMSnapshot.captureSnapshot',
+  // Native input events
+  'Input.dispatchMouseEvent',
+  'Input.dispatchKeyEvent',
+  'Input.insertText',
+  // Page metrics & screenshots
+  'Page.getLayoutMetrics',
+  'Page.captureScreenshot',
+  // Runtime (already used by 'exec', but needed for CDP passthrough too)
+  'Runtime.evaluate',
+  'Runtime.enable',
+  // Emulation (used by screenshot full-page)
+  'Emulation.setDeviceMetricsOverride',
+  'Emulation.clearDeviceMetricsOverride',
+]);
+
+async function handleCdp(cmd: Command, workspace: string): Promise<Result> {
+  if (!cmd.cdpMethod) return { id: cmd.id, ok: false, error: 'Missing cdpMethod' };
+  if (!CDP_ALLOWLIST.has(cmd.cdpMethod)) {
+    return { id: cmd.id, ok: false, error: `CDP method not permitted: ${cmd.cdpMethod}` };
+  }
+  const tabId = await resolveTabId(cmd.tabId, workspace);
+  try {
+    await executor.ensureAttached(tabId);
+    const data = await chrome.debugger.sendCommand(
+      { tabId },
+      cmd.cdpMethod,
+      cmd.cdpParams ?? {},
+    );
     return { id: cmd.id, ok: true, data };
   } catch (err) {
     return { id: cmd.id, ok: false, error: err instanceof Error ? err.message : String(err) };

@@ -17,7 +17,7 @@ function isDebuggableUrl(url?: string): boolean {
   return url.startsWith('http://') || url.startsWith('https://') || url === BLANK_PAGE;
 }
 
-async function ensureAttached(tabId: number): Promise<void> {
+export async function ensureAttached(tabId: number): Promise<void> {
   // Verify the tab URL is debuggable before attempting attach
   try {
     const tab = await chrome.tabs.get(tabId);

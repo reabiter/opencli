@@ -137,6 +137,23 @@ export class SelectorError extends CliError {
   }
 }
 
+export class AgentError extends CliError {
+  constructor(message: string, hint?: string) {
+    super('AGENT', message, hint, EXIT_CODES.GENERIC_ERROR);
+  }
+}
+
+export class AgentBudgetError extends CliError {
+  constructor(stepsUsed: number, maxSteps: number) {
+    super(
+      'AGENT_BUDGET',
+      `Agent used ${stepsUsed}/${maxSteps} steps without completing`,
+      'Increase --max-steps or simplify the task',
+      EXIT_CODES.GENERIC_ERROR,
+    );
+  }
+}
+
 // ── Utilities ───────────────────────────────────────────────────────────────
 
 /** Extract a human-readable message from an unknown caught value. */
@@ -159,4 +176,6 @@ export const ERROR_ICONS: Record<string, string> = {
   RATE_LIMITED:    '⏳',
   PAGE_CHANGED:    '🔄',
   CONFIG:          '⚙️ ',
+  AGENT:           '🤖',
+  AGENT_BUDGET:    '📊',
 };

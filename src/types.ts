@@ -75,4 +75,12 @@ export interface IPage {
   closeWindow?(): Promise<void>;
   /** Returns the current page URL, or null if unavailable. */
   getCurrentUrl?(): Promise<string | null>;
+  /** Send a raw CDP command via chrome.debugger passthrough. */
+  cdp?(method: string, params?: Record<string, unknown>): Promise<unknown>;
+  /** Click at native coordinates via CDP Input.dispatchMouseEvent. */
+  nativeClick?(x: number, y: number): Promise<void>;
+  /** Type text character-by-character via CDP Input.dispatchKeyEvent. */
+  nativeType?(text: string): Promise<void>;
+  /** Press a key via CDP Input.dispatchKeyEvent. */
+  nativeKeyPress?(key: string, modifiers?: string[]): Promise<void>;
 }
