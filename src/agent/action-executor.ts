@@ -57,16 +57,38 @@ export class ActionExecutor {
       return { action, success: false, error: `Element [${action.index}] not found in current snapshot` };
     }
 
-    // Prefer native CDP click for isTrusted events
-    if (this.page.nativeClick) {
-      await this.page.nativeClick(el.center.x, el.center.y);
-    } else {
-      await this.page.click(String(action.index));
-    }
+    // Try native CDP click, fallback to JS injection
+    await this.clickElement(action.index, el);
 
     // Brief wait for page to react
     await this.page.wait(0.5);
     return { action, success: true };
+  }
+
+  /** Click an element: try native CDP, fallback to JS injection */
+  private async clickElement(index: number, el: ElementInfo): Promise<void> {
+    if (this.page.nativeClick) {
+      try {
+        await this.page.nativeClick(el.center.x, el.center.y);
+        return;
+      } catch {
+        // CDP click failed (extension not updated?) — fallback to JS
+      }
+    }
+    await this.page.click(String(index));
+  }
+
+  /** Type into an element: try native CDP, fallback to JS injection */
+  private async typeIntoElement(index: number, text: string): Promise<void> {
+    if (this.page.nativeType) {
+      try {
+        await this.page.nativeType(text);
+        return;
+      } catch {
+        // CDP type failed — fallback to JS
+      }
+    }
+    await this.page.typeText(String(index), text);
   }
 
   private async executeType(
@@ -79,11 +101,7 @@ export class ActionExecutor {
     }
 
     // Click to focus the element first
-    if (this.page.nativeClick) {
-      await this.page.nativeClick(el.center.x, el.center.y);
-    } else {
-      await this.page.click(String(action.index));
-    }
+    await this.clickElement(action.index, el);
     await this.page.wait(0.2);
 
     // Clear existing content
@@ -91,11 +109,7 @@ export class ActionExecutor {
     await this.page.wait(0.1);
 
     // Type the text
-    if (this.page.nativeType) {
-      await this.page.nativeType(action.text);
-    } else {
-      await this.page.typeText(String(action.index), action.text);
-    }
+    await this.typeIntoElement(action.index, action.text);
 
     // Optionally press Enter
     if (action.pressEnter) {

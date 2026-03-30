@@ -91,6 +91,11 @@ export class LLMClient {
       throw new Error('No text content in LLM response');
     }
 
+    // Guard against empty/truncated responses (common with third-party proxies)
+    if (!textBlock.text || textBlock.text.trim().length === 0) {
+      throw new Error('LLM returned empty response (API proxy may have truncated output)');
+    }
+
     // Parse JSON from the response
     const jsonText = extractJson(textBlock.text);
     let parsed: unknown;
