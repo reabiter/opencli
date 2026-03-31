@@ -1,219 +1,68 @@
 [
-  {
-    "name": "example-title",
-    "command": "Go to example.com and extract the main heading text",
-    "url": "https://example.com",
-    "maxSteps": 5,
-    "judge": {
-      "type": "contains",
-      "field": "extractedData",
-      "value": "Example Domain"
-    }
-  },
-  {
-    "name": "google-search",
-    "command": "Search for 'opencli github' and extract the titles of the top 3 search results",
-    "url": "https://www.google.com",
-    "maxSteps": 10,
-    "judge": {
-      "type": "arrayMinLength",
-      "field": "extractedData",
-      "minLength": 3
-    }
-  },
-  {
-    "name": "hn-top-stories",
-    "command": "Extract the top 5 stories from the front page (title and score for each)",
-    "url": "https://news.ycombinator.com",
-    "maxSteps": 8,
-    "judge": {
-      "type": "arrayMinLength",
-      "field": "extractedData",
-      "minLength": 5
-    }
-  },
-  {
-    "name": "wikipedia-extract",
-    "command": "Extract the first paragraph of the JavaScript article",
-    "url": "https://en.wikipedia.org/wiki/JavaScript",
-    "maxSteps": 5,
-    "judge": {
-      "type": "contains",
-      "field": "extractedData",
-      "value": "programming language"
-    }
-  },
-  {
-    "name": "github-stars",
-    "command": "Find the number of stars on the browser-use/browser-use repository",
-    "url": "https://github.com/browser-use/browser-use",
-    "maxSteps": 5,
-    "judge": {
-      "type": "matchesPattern",
-      "field": "extractedData",
-      "pattern": "\\d"
-    }
-  },
-  {
-    "name": "ddg-search",
-    "command": "Search for 'weather beijing' and extract the search results",
-    "url": "https://duckduckgo.com",
-    "maxSteps": 10,
-    "judge": {
-      "type": "nonEmpty",
-      "field": "extractedData"
-    }
-  },
-  {
-    "name": "form-fill-simple",
-    "command": "Fill in the Customer Name field with 'OpenCLI Test' and the Telephone field with '1234567890'",
-    "url": "https://httpbin.org/forms/post",
-    "maxSteps": 8,
-    "judge": {
-      "type": "successTrue"
-    }
-  },
-  {
-    "name": "form-fill-complex",
-    "command": "Fill in all the fields on this form: Customer Name='OpenCLI', Telephone='555-0100', Email='test@opencli.dev', Size=Medium, Topping=Cheese, Delivery time='19:30', Comments='AutoResearch test'. Do not submit.",
-    "url": "https://httpbin.org/forms/post",
-    "maxSteps": 12,
-    "judge": {
-      "type": "successTrue"
-    }
-  },
-  {
-    "name": "books-scrape",
-    "command": "Extract the first 5 books with their title and price",
-    "url": "https://books.toscrape.com",
-    "maxSteps": 8,
-    "judge": {
-      "type": "arrayFieldsPresent",
-      "field": "extractedData",
-      "minLength": 5,
-      "requiredFields": ["title", "price"]
-    }
-  },
-  {
-    "name": "quotes-scrape",
-    "command": "Extract the first 3 quotes with their text and author",
-    "url": "https://quotes.toscrape.com",
-    "maxSteps": 8,
-    "judge": {
-      "type": "arrayFieldsPresent",
-      "field": "extractedData",
-      "minLength": 3,
-      "requiredFields": ["text", "author"]
-    }
-  },
-  {
-    "name": "scroll-extract-footer",
-    "command": "Scroll to the bottom of the page and extract the text in the footer",
-    "url": "https://quotes.toscrape.com",
-    "maxSteps": 8,
-    "judge": {
-      "type": "nonEmpty",
-      "field": "extractedData"
-    }
-  },
-  {
-    "name": "github-trending",
-    "command": "Extract the top 3 trending repositories today (repo name and description)",
-    "url": "https://github.com/trending",
-    "maxSteps": 8,
-    "judge": {
-      "type": "arrayMinLength",
-      "field": "extractedData",
-      "minLength": 3
-    }
-  },
-  {
-    "name": "hn-click-first",
-    "command": "Click on the first story link and extract the title of the page you land on",
-    "url": "https://news.ycombinator.com",
-    "maxSteps": 8,
-    "judge": {
-      "type": "nonEmpty",
-      "field": "extractedData"
-    }
-  },
-  {
-    "name": "example-follow-link",
-    "command": "Click the 'More information...' link and extract the heading of the new page",
-    "url": "https://example.com",
-    "maxSteps": 8,
-    "judge": {
-      "type": "contains",
-      "field": "extractedData",
-      "value": "IANA"
-    }
-  },
-  {
-    "name": "jsonplaceholder-endpoints",
-    "command": "Extract the list of available API resource endpoints shown on the page",
-    "url": "https://jsonplaceholder.typicode.com",
-    "maxSteps": 5,
-    "judge": {
-      "type": "nonEmpty",
-      "field": "extractedData"
-    }
-  },
-  {
-    "name": "bench-wikipedia-nav",
-    "command": "Go to Wikipedia, search for 'Rust programming language', click the result, and extract the first sentence of the article",
-    "url": "https://en.wikipedia.org",
-    "maxSteps": 10,
-    "judge": {
-      "type": "contains",
-      "field": "extractedData",
-      "value": "programming language"
-    },
-    "set": "test"
-  },
-  {
-    "name": "bench-reddit-extract",
-    "command": "Extract the titles of the top 5 posts on the front page",
-    "url": "https://old.reddit.com",
-    "maxSteps": 8,
-    "judge": {
-      "type": "arrayMinLength",
-      "field": "extractedData",
-      "minLength": 5
-    },
-    "set": "test"
-  },
-  {
-    "name": "bench-imdb-search",
-    "command": "Search for 'The Matrix' and extract the year and rating of the first result",
-    "url": "https://www.imdb.com",
-    "maxSteps": 10,
-    "judge": {
-      "type": "contains",
-      "field": "extractedData",
-      "value": "1999"
-    },
-    "set": "test"
-  },
-  {
-    "name": "bench-npm-package",
-    "command": "Search for the 'zod' package and extract its weekly download count and description",
-    "url": "https://www.npmjs.com",
-    "maxSteps": 10,
-    "judge": {
-      "type": "nonEmpty",
-      "field": "extractedData"
-    },
-    "set": "test"
-  },
-  {
-    "name": "bench-stackoverflow",
-    "command": "Search for 'how to center a div css' and extract the title and vote count of the top answer",
-    "url": "https://stackoverflow.com",
-    "maxSteps": 10,
-    "judge": {
-      "type": "nonEmpty",
-      "field": "extractedData"
-    },
-    "set": "test"
-  }
+  {"name": "extract-title-example", "command": "Extract the main heading text", "url": "https://example.com", "maxSteps": 5, "judge": {"type": "contains", "field": "extractedData", "value": "Example Domain"}},
+  {"name": "extract-title-iana", "command": "Extract the page heading", "url": "https://www.iana.org", "maxSteps": 5, "judge": {"type": "nonEmpty", "field": "extractedData"}},
+  {"name": "extract-paragraph-wiki-js", "command": "Extract the first paragraph of the article", "url": "https://en.wikipedia.org/wiki/JavaScript", "maxSteps": 5, "judge": {"type": "contains", "field": "extractedData", "value": "programming language"}},
+  {"name": "extract-paragraph-wiki-python", "command": "Extract the first paragraph of the article", "url": "https://en.wikipedia.org/wiki/Python_(programming_language)", "maxSteps": 5, "judge": {"type": "contains", "field": "extractedData", "value": "programming language"}},
+  {"name": "extract-github-stars", "command": "Find the number of stars on this repository", "url": "https://github.com/browser-use/browser-use", "maxSteps": 5, "judge": {"type": "matchesPattern", "field": "extractedData", "pattern": "\\d"}},
+  {"name": "extract-github-description", "command": "Extract the repository description", "url": "https://github.com/anthropics/claude-code", "maxSteps": 5, "judge": {"type": "nonEmpty", "field": "extractedData"}},
+  {"name": "extract-github-readme-heading", "command": "Extract the first heading from the README", "url": "https://github.com/vercel/next.js", "maxSteps": 5, "judge": {"type": "nonEmpty", "field": "extractedData"}},
+  {"name": "extract-npm-downloads", "command": "Find the weekly download count for this package", "url": "https://www.npmjs.com/package/zod", "maxSteps": 8, "judge": {"type": "matchesPattern", "field": "extractedData", "pattern": "\\d"}},
+  {"name": "extract-npm-description", "command": "Extract the package description", "url": "https://www.npmjs.com/package/express", "maxSteps": 5, "judge": {"type": "nonEmpty", "field": "extractedData"}},
+
+  {"name": "list-hn-top5", "command": "Extract the top 5 stories with their titles and scores", "url": "https://news.ycombinator.com", "maxSteps": 8, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 5}},
+  {"name": "list-hn-top10", "command": "Extract the top 10 stories with title, score, and author", "url": "https://news.ycombinator.com", "maxSteps": 8, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 10}},
+  {"name": "list-books-5", "command": "Extract the first 5 books with their title and price", "url": "https://books.toscrape.com", "maxSteps": 8, "judge": {"type": "arrayFieldsPresent", "field": "extractedData", "minLength": 5, "requiredFields": ["title", "price"]}},
+  {"name": "list-books-10", "command": "Extract the first 10 books with their title, price, and rating", "url": "https://books.toscrape.com", "maxSteps": 10, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 10}},
+  {"name": "list-quotes-3", "command": "Extract the first 3 quotes with their text and author", "url": "https://quotes.toscrape.com", "maxSteps": 8, "judge": {"type": "arrayFieldsPresent", "field": "extractedData", "minLength": 3, "requiredFields": ["text", "author"]}},
+  {"name": "list-quotes-tags", "command": "Extract the first 5 quotes with their text, author, and tags", "url": "https://quotes.toscrape.com", "maxSteps": 8, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 5}},
+  {"name": "list-github-trending", "command": "Extract the top 3 trending repositories today with their name and description", "url": "https://github.com/trending", "maxSteps": 8, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 3}},
+  {"name": "list-github-trending-lang", "command": "Extract the top 5 trending Python repositories today", "url": "https://github.com/trending/python", "maxSteps": 8, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 5}},
+  {"name": "list-jsonplaceholder-posts", "command": "Extract the first 5 posts (title and body) from the API", "url": "https://jsonplaceholder.typicode.com/posts", "maxSteps": 5, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 5}},
+  {"name": "list-jsonplaceholder-users", "command": "Extract the names and emails of all users", "url": "https://jsonplaceholder.typicode.com/users", "maxSteps": 5, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 5}},
+
+  {"name": "search-google", "command": "Search for 'opencli github' and extract the titles of the top 3 results", "url": "https://www.google.com", "maxSteps": 10, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 3}},
+  {"name": "search-ddg", "command": "Search for 'weather beijing' and extract the search results", "url": "https://duckduckgo.com", "maxSteps": 10, "judge": {"type": "nonEmpty", "field": "extractedData"}},
+  {"name": "search-ddg-tech", "command": "Search for 'TypeScript tutorial' and extract the first 3 result titles and URLs", "url": "https://duckduckgo.com", "maxSteps": 10, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 3}},
+  {"name": "search-wiki", "command": "Search for 'Rust programming language' in the search box, click the result, and extract the first sentence", "url": "https://en.wikipedia.org", "maxSteps": 10, "judge": {"type": "contains", "field": "extractedData", "value": "programming language"}},
+  {"name": "search-npm", "command": "Search for 'react' and extract the name and description of the top 3 packages", "url": "https://www.npmjs.com", "maxSteps": 10, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 3}},
+  {"name": "search-github", "command": "Search for 'browser automation' and extract the top 3 repository names", "url": "https://github.com/search", "maxSteps": 10, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 3}},
+
+  {"name": "nav-click-link-example", "command": "Click the 'More information...' link and extract the heading of the new page", "url": "https://example.com", "maxSteps": 8, "judge": {"type": "contains", "field": "extractedData", "value": "IANA"}},
+  {"name": "nav-click-hn-first", "command": "Click on the first story link and extract the title of the page you land on", "url": "https://news.ycombinator.com", "maxSteps": 8, "judge": {"type": "nonEmpty", "field": "extractedData"}},
+  {"name": "nav-click-hn-comments", "command": "Click on the comments link of the first story and extract the story title from the comments page", "url": "https://news.ycombinator.com", "maxSteps": 8, "judge": {"type": "nonEmpty", "field": "extractedData"}},
+  {"name": "nav-click-wiki-link", "command": "Click on the 'History' section link in the table of contents and extract the first sentence of that section", "url": "https://en.wikipedia.org/wiki/JavaScript", "maxSteps": 10, "judge": {"type": "nonEmpty", "field": "extractedData"}},
+  {"name": "nav-click-github-tab", "command": "Click on the 'Issues' tab and extract the title of the first open issue", "url": "https://github.com/vercel/next.js", "maxSteps": 10, "judge": {"type": "nonEmpty", "field": "extractedData"}},
+  {"name": "nav-go-back", "command": "Click the 'More information...' link, then go back, and extract the heading of the original page", "url": "https://example.com", "maxSteps": 10, "judge": {"type": "contains", "field": "extractedData", "value": "Example Domain"}},
+  {"name": "nav-multi-step", "command": "Go to the 'About' page from the footer link, then extract the page title", "url": "https://quotes.toscrape.com", "maxSteps": 10, "judge": {"type": "nonEmpty", "field": "extractedData"}},
+
+  {"name": "scroll-footer-quotes", "command": "Scroll to the bottom of the page and extract the text in the footer", "url": "https://quotes.toscrape.com", "maxSteps": 8, "judge": {"type": "nonEmpty", "field": "extractedData"}},
+  {"name": "scroll-footer-books", "command": "Scroll to the bottom and extract the copyright text", "url": "https://books.toscrape.com", "maxSteps": 8, "judge": {"type": "nonEmpty", "field": "extractedData"}},
+  {"name": "scroll-long-page", "command": "Scroll down and count how many posts are on this page", "url": "https://jsonplaceholder.typicode.com/posts", "maxSteps": 8, "judge": {"type": "matchesPattern", "field": "extractedData", "pattern": "\\d"}},
+  {"name": "scroll-find-element", "command": "Scroll down to find the 'Next' pagination link and extract its URL", "url": "https://quotes.toscrape.com", "maxSteps": 8, "judge": {"type": "nonEmpty", "field": "extractedData"}},
+  {"name": "scroll-lazy-load", "command": "Scroll down to load more content and extract the total number of items visible on the page", "url": "https://books.toscrape.com", "maxSteps": 8, "judge": {"type": "matchesPattern", "field": "extractedData", "pattern": "\\d"}},
+
+  {"name": "form-simple-name", "command": "Fill in the Customer Name field with 'OpenCLI Test' and the Telephone field with '1234567890'. Do not submit.", "url": "https://httpbin.org/forms/post", "maxSteps": 8, "judge": {"type": "successTrue"}},
+  {"name": "form-text-inputs", "command": "Fill the Customer Name with 'Alice' and Telephone with '555-1234'. Do not submit.", "url": "https://httpbin.org/forms/post", "maxSteps": 8, "judge": {"type": "successTrue"}},
+  {"name": "form-radio-select", "command": "Select the 'Medium' pizza size option. Do not submit.", "url": "https://httpbin.org/forms/post", "maxSteps": 8, "judge": {"type": "successTrue"}},
+  {"name": "form-checkbox", "command": "Check the 'Cheese' topping checkbox. Do not submit.", "url": "https://httpbin.org/forms/post", "maxSteps": 8, "judge": {"type": "successTrue"}},
+  {"name": "form-textarea", "command": "Type 'This is an automated test by OpenCLI' into the Delivery Instructions textarea. Do not submit.", "url": "https://httpbin.org/forms/post", "maxSteps": 8, "judge": {"type": "successTrue"}},
+  {"name": "form-login-fake", "command": "Fill the username field with 'testuser' and the password field with 'testpass'. Do not submit.", "url": "https://the-internet.herokuapp.com/login", "maxSteps": 8, "judge": {"type": "successTrue"}},
+
+  {"name": "complex-wiki-toc", "command": "Extract the table of contents headings from the JavaScript article", "url": "https://en.wikipedia.org/wiki/JavaScript", "maxSteps": 8, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 5}},
+  {"name": "complex-books-detail", "command": "Click on the first book, then extract its title, price, and description from the detail page", "url": "https://books.toscrape.com", "maxSteps": 10, "judge": {"type": "nonEmpty", "field": "extractedData"}},
+  {"name": "complex-quotes-page2", "command": "Navigate to page 2 of quotes and extract the first 3 quotes with author", "url": "https://quotes.toscrape.com", "maxSteps": 10, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 3}},
+  {"name": "complex-github-repo-info", "command": "Extract the repository language, license, and last commit date", "url": "https://github.com/expressjs/express", "maxSteps": 8, "judge": {"type": "nonEmpty", "field": "extractedData"}},
+  {"name": "complex-hn-story-comments", "command": "Click the first story, go back, then click the comments link and extract the number of comments", "url": "https://news.ycombinator.com", "maxSteps": 12, "judge": {"type": "nonEmpty", "field": "extractedData"}},
+  {"name": "complex-multi-extract", "command": "Extract both the page title AND the first paragraph text", "url": "https://en.wikipedia.org/wiki/TypeScript", "maxSteps": 5, "judge": {"type": "contains", "field": "extractedData", "value": "TypeScript"}},
+
+  {"name": "bench-reddit-top5", "command": "Extract the titles of the top 5 posts on the front page", "url": "https://old.reddit.com", "maxSteps": 8, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 5}, "set": "test"},
+  {"name": "bench-imdb-matrix", "command": "Search for 'The Matrix' and extract the year and rating of the first result", "url": "https://www.imdb.com", "maxSteps": 10, "judge": {"type": "contains", "field": "extractedData", "value": "1999"}, "set": "test"},
+  {"name": "bench-npm-zod", "command": "Search for the 'zod' package and extract its weekly download count and description", "url": "https://www.npmjs.com", "maxSteps": 10, "judge": {"type": "nonEmpty", "field": "extractedData"}, "set": "test"},
+  {"name": "bench-wiki-search", "command": "Search for 'machine learning', click the result, and extract the first sentence", "url": "https://en.wikipedia.org", "maxSteps": 10, "judge": {"type": "contains", "field": "extractedData", "value": "learning"}, "set": "test"},
+  {"name": "bench-github-profile", "command": "Extract the bio and number of public repositories", "url": "https://github.com/torvalds", "maxSteps": 8, "judge": {"type": "nonEmpty", "field": "extractedData"}, "set": "test"},
+  {"name": "bench-books-category", "command": "Click on the 'Science' category, then extract the first 3 book titles", "url": "https://books.toscrape.com", "maxSteps": 10, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 3}, "set": "test"},
+  {"name": "bench-quotes-author", "command": "Click on the first author link and extract the author's bio", "url": "https://quotes.toscrape.com", "maxSteps": 10, "judge": {"type": "nonEmpty", "field": "extractedData"}, "set": "test"},
+  {"name": "bench-ddg-images", "command": "Search for 'sunset' and extract the text of the first 3 search results", "url": "https://duckduckgo.com", "maxSteps": 10, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 3}, "set": "test"},
+  {"name": "bench-httpbin-headers", "command": "Extract the User-Agent and Host headers shown on this page", "url": "https://httpbin.org/headers", "maxSteps": 5, "judge": {"type": "nonEmpty", "field": "extractedData"}, "set": "test"},
+  {"name": "bench-jsonapi-todo", "command": "Extract the first 5 todo items with their title and completion status", "url": "https://jsonplaceholder.typicode.com/todos", "maxSteps": 5, "judge": {"type": "arrayMinLength", "field": "extractedData", "minLength": 5}, "set": "test"}
 ]
