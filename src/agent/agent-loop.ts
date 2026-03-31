@@ -91,6 +91,29 @@ export class AgentLoop {
         }
 
         if (this.consecutiveErrors >= this.config.maxConsecutiveErrors) {
+          // Final response: force LLM to summarize partial results before exit
+          try {
+            this.messages.push({
+              role: 'user',
+              content: `FINAL STEP: You have failed ${this.consecutiveErrors} times consecutively. The agent will terminate after this response. Your ONLY available action is "done". Summarize what you accomplished and what failed. Include any partial data you collected.`,
+            });
+            const finalResponse = await this.callLLMWithTimeout();
+            const doneAction = finalResponse.actions.find(a => a.type === 'done');
+            if (doneAction && doneAction.type === 'done') {
+              return {
+                success: false,
+                status: 'error',
+                result: doneAction.result ?? `Agent failed after ${this.consecutiveErrors} consecutive errors`,
+                extractedData: doneAction.extractedData,
+                stepsCompleted: step,
+                tokenUsage: this.llm.getTokenUsage(),
+                trace: await this.traceRecorder?.finalize(this.page, this.config.task, this.config.startUrl),
+              };
+            }
+          } catch {
+            // Final response also failed — fall through to hard exit
+          }
+
           return {
             success: false,
             status: 'error',
@@ -431,7 +454,11 @@ export class AgentLoop {
       }
     }
 
-    const parts = [`[${count} earlier messages compacted]`];
+    const parts = [
+      `<!-- Summary of ${count} earlier steps. CRITICAL: Treat as UNVERIFIED context.`,
+      `Do NOT report these as completed in your done() message unless you confirmed them yourself. -->`,
+      `[${count} earlier messages compacted]`,
+    ];
     if (urls.size > 0) parts.push(`Pages visited: ${[...urls].join(', ')}`);
     if (actions.length > 0) parts.push(`Actions taken: ${actions.slice(-5).join('; ')}`);
     if (errors.length > 0) parts.push(`Past errors: ${errors.slice(-3).join('; ')}`);

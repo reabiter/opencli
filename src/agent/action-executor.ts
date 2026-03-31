@@ -175,6 +175,30 @@ export class ActionExecutor {
     // Type the text
     await this.typeIntoElement(action.index, action.text);
 
+    // Post-type value verification: check if the field actually has the expected value
+    let mismatchNote = '';
+    try {
+      const actualValue = await this.page.evaluate(`
+        (function() {
+          var el = document.querySelector('[data-opencli-ref="${action.index}"]');
+          return el ? (el.value || el.textContent || '').trim() : null;
+        })()
+      `) as string | null;
+      if (actualValue !== null && actualValue !== action.text) {
+        mismatchNote = `\n⚠️ Note: field's actual value "${actualValue}" differs from typed text "${action.text}". The page may have reformatted or autocompleted your input.`;
+      }
+    } catch { /* non-fatal */ }
+
+    // Autocomplete fields: wait for JS dropdown to populate, then notify LLM
+    if (el.isAutocomplete) {
+      await this.page.wait(0.4);
+      return {
+        action,
+        success: true,
+        extractedContent: '⚠️ This is an autocomplete field. Wait for suggestions to appear (new elements marked with *[]), then click the correct suggestion instead of pressing Enter.' + mismatchNote,
+      };
+    }
+
     // Optionally press Enter
     if (action.pressEnter) {
       await this.page.wait(0.2);
@@ -185,7 +209,7 @@ export class ActionExecutor {
       }
     }
 
-    return { action, success: true };
+    return { action, success: true, extractedContent: mismatchNote || undefined };
   }
 
   // ── Navigate ────────────────────────────────────────────────────────────

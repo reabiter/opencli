@@ -15,6 +15,8 @@ export interface ElementInfo {
   bbox: { x: number; y: number; width: number; height: number };
   center: { x: number; y: number };
   attributes: Record<string, string>;
+  /** Whether this is an autocomplete/combobox field */
+  isAutocomplete?: boolean;
   /** Accessibility role (from AX tree, if available) */
   axRole?: string;
   /** Accessibility name (from AX tree, if available) */
@@ -63,6 +65,13 @@ const COLLECT_ELEMENT_INFO_JS = `
       var val = el.getAttribute(attr);
       if (val !== null && val !== '') attrs[attr] = val;
     }
+    // Detect autocomplete fields (combobox, aria-autocomplete, datalist)
+    var isAutocomplete = (attrs['role'] === 'combobox')
+      || (attrs['aria-autocomplete'] && attrs['aria-autocomplete'] !== 'none')
+      || !!el.getAttribute('list')
+      || (el.getAttribute('aria-haspopup') && el.getAttribute('aria-haspopup') !== 'false'
+          && (el.getAttribute('aria-controls') || el.getAttribute('aria-owns')));
+
     result.push({
       index: idx,
       tag: el.tagName.toLowerCase(),
@@ -70,6 +79,7 @@ const COLLECT_ELEMENT_INFO_JS = `
       bbox: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
       center: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 },
       attributes: attrs,
+      isAutocomplete: !!isAutocomplete,
     });
   }
   return {

@@ -71,7 +71,7 @@ ELEMENT INTERACTION:
 1. Only use element indices [N] that exist in the CURRENT DOM snapshot
 2. If an element is not visible, scroll down to reveal it before interacting
 3. For dropdowns (<select>), use "select_dropdown" instead of "click"
-4. After typing in a search/autocomplete field, wait 1-2 seconds for suggestions to appear
+4. AUTOCOMPLETE FIELDS: After typing in autocomplete/combobox fields, WAIT for suggestions to appear in the next step. If new elements appear (marked with *[]), click the correct suggestion instead of pressing Enter. Only press Enter if no suggestions appear after waiting one step
 5. Close popups, cookie banners, or modals FIRST before interacting with page content
 
 NAVIGATION:
