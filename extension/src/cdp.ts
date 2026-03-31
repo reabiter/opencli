@@ -45,8 +45,8 @@ export async function ensureAttached(tabId: number): Promise<void> {
 
   // Retry attach up to 3 times — other extensions (1Password, Playwright MCP Bridge)
   // can temporarily interfere with chrome.debugger. A short delay usually resolves it.
-  const MAX_ATTACH_RETRIES = 3;
-  const RETRY_DELAY_MS = 800;
+  const MAX_ATTACH_RETRIES = 5;
+  const RETRY_DELAY_MS = 1500;
   let lastError = '';
 
   for (let attempt = 1; attempt <= MAX_ATTACH_RETRIES; attempt++) {
@@ -92,25 +92,44 @@ export async function ensureAttached(tabId: number): Promise<void> {
 }
 
 export async function evaluate(tabId: number, expression: string): Promise<unknown> {
-  await ensureAttached(tabId);
+  // Retry the entire evaluate (attach + command) up to 3 times.
+  // This handles cases where other extensions (1Password) detach us mid-operation.
+  const MAX_EVAL_RETRIES = 3;
+  for (let attempt = 1; attempt <= MAX_EVAL_RETRIES; attempt++) {
+    try {
+      await ensureAttached(tabId);
 
-  const result = await chrome.debugger.sendCommand({ tabId }, 'Runtime.evaluate', {
-    expression,
-    returnByValue: true,
-    awaitPromise: true,
-  }) as {
-    result?: { type: string; value?: unknown; description?: string; subtype?: string };
-    exceptionDetails?: { exception?: { description?: string }; text?: string };
-  };
+      const result = await chrome.debugger.sendCommand({ tabId }, 'Runtime.evaluate', {
+        expression,
+        returnByValue: true,
+        awaitPromise: true,
+      }) as {
+        result?: { type: string; value?: unknown; description?: string; subtype?: string };
+        exceptionDetails?: { exception?: { description?: string }; text?: string };
+      };
 
-  if (result.exceptionDetails) {
-    const errMsg = result.exceptionDetails.exception?.description
-      || result.exceptionDetails.text
-      || 'Eval error';
-    throw new Error(errMsg);
+      if (result.exceptionDetails) {
+        const errMsg = result.exceptionDetails.exception?.description
+          || result.exceptionDetails.text
+          || 'Eval error';
+        throw new Error(errMsg);
+      }
+
+      return result.result?.value;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // Only retry on attach/debugger errors, not on JS eval errors
+      const isAttachError = msg.includes('attach failed') || msg.includes('Debugger is not attached')
+        || msg.includes('chrome-extension://') || msg.includes('Target closed');
+      if (isAttachError && attempt < MAX_EVAL_RETRIES) {
+        attached.delete(tabId); // Force re-attach on next attempt
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        continue;
+      }
+      throw e;
+    }
   }
-
-  return result.result?.value;
+  throw new Error('evaluate: max retries exhausted');
 }
 
 export const evaluateAsync = evaluate;
