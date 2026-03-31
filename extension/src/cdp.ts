@@ -43,23 +43,44 @@ export async function ensureAttached(tabId: number): Promise<void> {
     }
   }
 
-  try {
-    await chrome.debugger.attach({ tabId }, '1.3');
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    const hint = msg.includes('chrome-extension://')
+  // Retry attach up to 3 times — other extensions (1Password, Playwright MCP Bridge)
+  // can temporarily interfere with chrome.debugger. A short delay usually resolves it.
+  const MAX_ATTACH_RETRIES = 3;
+  const RETRY_DELAY_MS = 800;
+  let lastError = '';
+
+  for (let attempt = 1; attempt <= MAX_ATTACH_RETRIES; attempt++) {
+    try {
+      // Force detach first to clear any stale state from other extensions
+      try { await chrome.debugger.detach({ tabId }); } catch { /* ignore */ }
+      await chrome.debugger.attach({ tabId }, '1.3');
+      lastError = '';
+      break; // Success
+    } catch (e: unknown) {
+      lastError = e instanceof Error ? e.message : String(e);
+      if (attempt < MAX_ATTACH_RETRIES) {
+        console.warn(`[opencli] attach attempt ${attempt}/${MAX_ATTACH_RETRIES} failed: ${lastError}, retrying in ${RETRY_DELAY_MS}ms...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+        // Re-verify tab URL before retrying (it may have changed)
+        try {
+          const tab = await chrome.tabs.get(tabId);
+          if (!isDebuggableUrl(tab.url)) {
+            lastError = `Tab URL changed to ${tab.url} during retry`;
+            break; // Don't retry if URL became un-debuggable
+          }
+        } catch {
+          lastError = `Tab ${tabId} no longer exists`;
+          break;
+        }
+      }
+    }
+  }
+
+  if (lastError) {
+    const hint = lastError.includes('chrome-extension://')
       ? '. Tip: another Chrome extension may be interfering — try disabling other extensions'
       : '';
-    if (msg.includes('Another debugger is already attached')) {
-      try { await chrome.debugger.detach({ tabId }); } catch { /* ignore */ }
-      try {
-        await chrome.debugger.attach({ tabId }, '1.3');
-      } catch {
-        throw new Error(`attach failed: ${msg}${hint}`);
-      }
-    } else {
-      throw new Error(`attach failed: ${msg}${hint}`);
-    }
+    throw new Error(`attach failed: ${lastError}${hint}`);
   }
   attached.add(tabId);
 
