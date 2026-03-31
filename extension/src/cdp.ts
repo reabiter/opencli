@@ -14,7 +14,7 @@ function isDebuggableUrl(url?: string): boolean {
   return url.startsWith('http://') || url.startsWith('https://') || url === 'about:blank' || url.startsWith('data:');
 }
 
-export async function ensureAttached(tabId: number): Promise<void> {
+export async function ensureAttached(tabId: number, aggressiveRetry: boolean = false): Promise<void> {
   // Verify the tab URL is debuggable before attempting attach
   try {
     const tab = await chrome.tabs.get(tabId);
@@ -45,8 +45,10 @@ export async function ensureAttached(tabId: number): Promise<void> {
 
   // Retry attach up to 3 times — other extensions (1Password, Playwright MCP Bridge)
   // can temporarily interfere with chrome.debugger. A short delay usually resolves it.
-  const MAX_ATTACH_RETRIES = 5;
-  const RETRY_DELAY_MS = 1500;
+  // Normal commands: 2 retries, 500ms delay (fast fail for non-operate use)
+  // Operate commands: 5 retries, 1500ms delay (aggressive, tolerates extension interference)
+  const MAX_ATTACH_RETRIES = aggressiveRetry ? 5 : 2;
+  const RETRY_DELAY_MS = aggressiveRetry ? 1500 : 500;
   let lastError = '';
 
   for (let attempt = 1; attempt <= MAX_ATTACH_RETRIES; attempt++) {
@@ -91,13 +93,13 @@ export async function ensureAttached(tabId: number): Promise<void> {
   }
 }
 
-export async function evaluate(tabId: number, expression: string): Promise<unknown> {
-  // Retry the entire evaluate (attach + command) up to 3 times.
-  // This handles cases where other extensions (1Password) detach us mid-operation.
-  const MAX_EVAL_RETRIES = 3;
+export async function evaluate(tabId: number, expression: string, aggressiveRetry: boolean = false): Promise<unknown> {
+  // Retry the entire evaluate (attach + command).
+  // Normal: 2 retries. Operate: 3 retries (tolerates extension interference).
+  const MAX_EVAL_RETRIES = aggressiveRetry ? 3 : 2;
   for (let attempt = 1; attempt <= MAX_EVAL_RETRIES; attempt++) {
     try {
-      await ensureAttached(tabId);
+      await ensureAttached(tabId, aggressiveRetry);
 
       const result = await chrome.debugger.sendCommand({ tabId }, 'Runtime.evaluate', {
         expression,

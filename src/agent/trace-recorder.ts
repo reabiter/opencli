@@ -66,6 +66,7 @@ const INSTALL_NETWORK_INTERCEPTOR_JS = `
   if (window.__opencli_net_capture) return;
   window.__opencli_net_capture = [];
   var MAX_BODY_SIZE = 50000; // 50KB per response, prevent memory explosion
+  var MAX_CAPTURES = 200;   // Cap total captured requests to prevent OOM on long sessions
 
   var origFetch = window.fetch;
   window.fetch = async function() {
@@ -79,7 +80,7 @@ const INSTALL_NETWORK_INTERCEPTOR_JS = `
         if (text.length <= MAX_BODY_SIZE) {
           try { body = JSON.parse(text); } catch(e) { body = text; }
         }
-        window.__opencli_net_capture.push({
+        if (window.__opencli_net_capture.length < MAX_CAPTURES) window.__opencli_net_capture.push({
           url: resp.url || (arguments[0] && arguments[0].url) || String(arguments[0]),
           method: (arguments[1] && arguments[1].method) || 'GET',
           status: resp.status,
@@ -110,7 +111,7 @@ const INSTALL_NETWORK_INTERCEPTOR_JS = `
           if (text && text.length <= MAX_BODY_SIZE) {
             try { body = JSON.parse(text); } catch(e) { body = text; }
           }
-          window.__opencli_net_capture.push({
+          if (window.__opencli_net_capture.length < MAX_CAPTURES) window.__opencli_net_capture.push({
             url: xhr.__opencli_url,
             method: xhr.__opencli_method || 'GET',
             status: xhr.status,

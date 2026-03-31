@@ -430,7 +430,7 @@ async function resolveTabId(tabId: number | undefined, workspace: string): Promi
   if (adoptedTabId !== null) return adoptedTabId;
 
   const existingSession = automationSessions.get(workspace);
-  if (existingSession?.preferredTabId !== null) {
+  if (existingSession && existingSession.preferredTabId !== null) {
     try {
       const preferredTab = await chrome.tabs.get(existingSession.preferredTabId);
       if (isDebuggableUrl(preferredTab.url)) return preferredTab.id!;
@@ -496,7 +496,8 @@ async function handleExec(cmd: Command, workspace: string): Promise<Result> {
   if (!cmd.code) return { id: cmd.id, ok: false, error: 'Missing code' };
   const tabId = await resolveTabId(cmd.tabId, workspace);
   try {
-    const data = await executor.evaluateAsync(tabId, cmd.code);
+    const aggressive = workspace.startsWith('operate:');
+    const data = await executor.evaluateAsync(tabId, cmd.code, aggressive);
     return { id: cmd.id, ok: true, data };
   } catch (err) {
     return { id: cmd.id, ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -718,7 +719,8 @@ async function handleCdp(cmd: Command, workspace: string): Promise<Result> {
   }
   const tabId = await resolveTabId(cmd.tabId, workspace);
   try {
-    await executor.ensureAttached(tabId);
+    const aggressive = workspace.startsWith('operate:');
+    await executor.ensureAttached(tabId, aggressive);
     const data = await chrome.debugger.sendCommand(
       { tabId },
       cmd.cdpMethod,

@@ -83,6 +83,25 @@ opencli hackernews top --limit 5       # Public API, no browser needed
 opencli bilibili hot --limit 5         # Browser command (requires Extension)
 ```
 
+### 4. AI Agent (New!)
+
+Let an AI agent operate your browser with natural language:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+opencli operate "go to Hacker News and extract the top 5 stories"
+opencli operate --url https://github.com/trending "extract top 3 trending repos"
+```
+
+Save successful operations as reusable commands (no AI needed for replay):
+
+```bash
+opencli operate --save-as hn/top "get top 5 HN stories" --url https://news.ycombinator.com
+opencli hn top   # Runs without AI from now on
+```
+
+See [OPERATE.md](./OPERATE.md) for full documentation.
+
 ### Update
 
 ```bash
