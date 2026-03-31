@@ -25,7 +25,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
     );
   }
 
-  const workspace = opts.workspace ?? `operate:${Date.now()}`;
+  const workspace = opts.workspace ?? `operate:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   const result = await browserSession(opts.BrowserFactory, async (page) => {
     const agent = new AgentLoop(page, {
@@ -39,7 +39,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentResult> {
     // so the page is still available for validation)
     if (opts.saveAs && agentResult.success && agentResult.trace) {
       try {
-        const saved = await saveTraceAsSkillWithValidation(agentResult.trace, opts.saveAs);
+        const saved = await saveTraceAsSkillWithValidation(agentResult.trace, opts.saveAs, agent.getLLMClient());
         if (opts.verbose) {
           console.log(chalk.green(`  Skill saved: ${saved.path}`));
           console.log(chalk.dim(`  Run with: opencli ${saved.command}`));

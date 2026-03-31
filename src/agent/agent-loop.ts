@@ -42,6 +42,9 @@ export class AgentLoop {
   private static readonly LOOP_CRITICAL_THRESHOLD = 10;
   private static readonly PAGE_STALL_THRESHOLD = 4;
 
+  /** Expose LLM client so callers (skill-saver) can share cost tracking */
+  getLLMClient(): LLMClient { return this.llm; }
+
   // Sensitive data patterns
   private sensitivePatterns: Map<string, string>;
 
@@ -282,9 +285,9 @@ export class AgentLoop {
   private hashAction(response: AgentResponse): string {
     const key = response.actions.map(a => {
       if (a.type === 'click') return `click:${a.index}`;
-      if (a.type === 'type') return `type:${a.index}`;
+      if (a.type === 'type') return `type:${a.index}:${a.text}`;
       if (a.type === 'scroll') return `scroll:${a.direction}`;
-      if (a.type === 'navigate') return `nav`;
+      if (a.type === 'navigate') return `nav:${a.url}`;
       return a.type;
     }).join(',');
     return createHash('sha256').update(key).digest('hex').slice(0, 16);
@@ -399,7 +402,10 @@ export class AgentLoop {
       tail = tail.slice(1);
     }
 
-    this.messages = [...compacted, ...tail];
+    const result = [...compacted, ...tail];
+    // Safety: never compact below 6 messages (3 exchanges minimum for LLM context)
+    if (result.length < 6) return; // Skip compaction, keep current messages
+    this.messages = result;
   }
 
   private buildCompactionSummary(messages: ChatMessage[], count: number): string {

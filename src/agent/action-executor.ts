@@ -142,23 +142,35 @@ export class ActionExecutor {
       return { action, success: false, error: `Element [${action.index}] not found in current snapshot` };
     }
 
-    // Click to focus the element first
+    // Click to focus the element first, then verify focus
     await this.clickElement(action.index, el);
     await this.page.wait(0.2);
 
-    // Clear existing content (use same input method as typing for consistency)
-    if (this.page.nativeKeyPress) {
-      try {
-        await this.page.nativeKeyPress('a', ['Ctrl']);
-        await this.page.wait(0.1);
-      } catch {
-        await this.page.pressKey('Control+a');
-        await this.page.wait(0.1);
-      }
-    } else {
-      await this.page.pressKey('Control+a');
-      await this.page.wait(0.1);
+    // Verify the element is actually focused — if not, force focus via JS
+    const isFocused = await this.page.evaluate(`
+      (function() {
+        var el = document.querySelector('[data-opencli-ref="${action.index}"]');
+        if (!el) return false;
+        if (document.activeElement !== el) { el.focus(); }
+        return document.activeElement === el;
+      })()
+    `) as boolean;
+    if (!isFocused) {
+      return { action, success: false, error: `Element [${action.index}] could not be focused` };
     }
+
+    // Clear existing content — use JS selectAll to avoid macOS Cmd vs Ctrl issue
+    await this.page.evaluate(`
+      (function() {
+        var el = document.querySelector('[data-opencli-ref="${action.index}"]');
+        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+          el.select();
+        } else if (el) {
+          document.execCommand('selectAll');
+        }
+      })()
+    `);
+    await this.page.wait(0.1);
 
     // Type the text
     await this.typeIntoElement(action.index, action.text);
@@ -293,7 +305,10 @@ export class ActionExecutor {
         var opts = Array.from(sel.options);
         var match = opts.find(function(o) { return o.text.trim() === target || o.value === target; });
         if (!match) return { error: 'Option not found: ' + target, available: opts.map(function(o) { return o.text.trim(); }) };
-        sel.value = match.value;
+        // Use native setter to trigger React/Vue/Angular change detection
+        var nativeSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+        if (nativeSetter) { nativeSetter.call(sel, match.value); } else { sel.value = match.value; }
+        sel.dispatchEvent(new Event('input', { bubbles: true }));
         sel.dispatchEvent(new Event('change', { bubbles: true }));
         return { selected: match.text };
       })()

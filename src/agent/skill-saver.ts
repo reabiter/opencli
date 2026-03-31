@@ -23,6 +23,7 @@ export interface SavedSkill {
 export async function saveTraceAsSkill(
   trace: RichTrace,
   name: string,
+  llm?: LLMClient,
 ): Promise<SavedSkill> {
   // Parse and validate name (with path traversal protection)
   const parts = name.split('/');
@@ -38,8 +39,8 @@ export async function saveTraceAsSkill(
   // Stage 2: API Discovery
   const discovery = discoverApi(trace);
 
-  // Stage 3: LLM Code Generation
-  const tsCode = await generateTsAdapter(trace, discovery, site, command);
+  // Stage 3: LLM Code Generation (reuse caller's LLM client for cost tracking)
+  const tsCode = await generateTsAdapter(trace, discovery, site, command, llm);
 
   // Write .ts file
   const cliDir = join(homedir(), '.opencli', 'clis', site);
@@ -69,9 +70,10 @@ export async function saveTraceAsSkill(
 export async function saveTraceAsSkillWithValidation(
   trace: RichTrace,
   name: string,
+  llm?: LLMClient,
   maxRetries: number = 2,
 ): Promise<SavedSkill> {
-  const saved = await saveTraceAsSkill(trace, name);
+  const saved = await saveTraceAsSkill(trace, name, llm);
 
   // Syntax validation: check for common LLM code generation issues
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -88,8 +90,8 @@ export async function saveTraceAsSkillWithValidation(
       return saved;
     }
 
-    // Self-repair: feed issues back to LLM
-    const fixedCode = await repairAdapter(code, issues.join('\n'), trace);
+    // Self-repair: feed issues back to LLM (reuse same client for cost tracking)
+    const fixedCode = await repairAdapter(code, issues.join('\n'), trace, llm);
     writeFileSync(saved.path, fixedCode, 'utf-8');
   }
 
@@ -135,8 +137,9 @@ async function generateTsAdapter(
   discovery: DiscoveryResult,
   site: string,
   command: string,
+  existingLlm?: LLMClient,
 ): Promise<string> {
-  const llm = new LLMClient();
+  const llm = existingLlm ?? new LLMClient();
 
   const prompt = buildGenerationPrompt(trace, discovery, site, command);
 
@@ -205,9 +208,7 @@ cli({
 3. CSRF tokens: Extract from \`document.cookie\` if needed
 4. Return an ARRAY of objects matching the columns
 5. Use optional chaining (?.) for defensive field access
-6. For errors, just throw plain \`new Error('message')\` — do NOT import error classes from other packages
-7. Throw AuthRequiredError if cookies/tokens are missing
-8. Throw CommandExecutionError for API/parsing failures
+6. For errors, throw plain \`new Error('message')\` — for auth failures use \`new Error('AUTH_REQUIRED: not logged in')\`, for command failures use \`new Error('COMMAND_FAILED: ...')\`. Do NOT import error classes from other packages
 9. Never throw on empty results — return []`);
 
   // API Discovery results
@@ -272,7 +273,7 @@ cli({
 - Infer columns from the output data fields
 - Use ${discovery.strategy.toUpperCase()} strategy
 - Domain: ${extractDomain(trace.startUrl) ?? site}
-- Handle errors gracefully (AuthRequiredError, CommandExecutionError)
+- Handle errors gracefully with plain Error (prefix with AUTH_REQUIRED: or COMMAND_FAILED:)
 - Return [] if no results instead of throwing
 - CRITICAL: page.evaluate() takes a STRING argument, NOT an arrow function. Write: page.evaluate(\\\`(function() { ... })()\\\`)
 - CRITICAL: page.waitForSelector does NOT exist. Use: page.wait({ selector: '...' })
@@ -290,8 +291,9 @@ async function repairAdapter(
   code: string,
   error: string,
   trace: RichTrace,
+  existingLlm?: LLMClient,
 ): Promise<string> {
-  const llm = new LLMClient();
+  const llm = existingLlm ?? new LLMClient();
 
   const prompt = `Fix this OpenCLI TypeScript adapter that has an error.
 
@@ -354,7 +356,10 @@ function redactSensitiveValues(text: string): string {
   }
 }
 
-/** Strip sensitive data from trace before writing to disk. */
+/** Strip sensitive data from trace before writing to disk.
+ *  Response bodies are excluded entirely — they may contain PII
+ *  (emails, phone numbers) in non-standard keys. Bodies are only
+ *  used in the LLM prompt (with redaction), not persisted. */
 function sanitizeTrace(trace: RichTrace): RichTrace {
   return {
     ...trace,
@@ -365,11 +370,7 @@ function sanitizeTrace(trace: RichTrace): RichTrace {
     },
     networkCapture: trace.networkCapture.map(req => ({
       ...req,
-      responseBody: req.responseBody && typeof req.responseBody === 'object'
-        ? JSON.parse(JSON.stringify(req.responseBody, (key, val) =>
-            SENSITIVE_KEYS.test(key) ? '[REDACTED]' : val
-          ))
-        : req.responseBody,
+      responseBody: '[omitted from trace file]',
     })),
   };
 }
