@@ -84,7 +84,7 @@ export class ActionExecutor {
     await this.page.evaluate(`
       (function() {
         var el = document.querySelector('[data-opencli-ref="${index}"]');
-        if (el) el.scrollIntoView({ block: 'center', behavior: 'instant' });
+        if (el) el.scrollIntoView({ block: 'nearest', behavior: 'instant' });
       })()
     `);
     await this.page.wait(0.3);
